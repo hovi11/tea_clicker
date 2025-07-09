@@ -395,12 +395,14 @@
         document.getElementById('close-achievements').addEventListener('click', () => closeMenu('achievements'));
     }
 
-    // Обработка клика
-    function handleClick() {
-        const now = Date.now();
-        game.stats.totalClicks++;
-        game.stats.lastClickTime = now;
-        
+    // Обработка клика (полностью переработанная)
+function handleClick(timestamp) {
+    const now = timestamp || Date.now();
+    game.stats.totalClicks++;
+    game.stats.lastClickTime = now;
+    
+    // Обновляем время последнего клика для статистики
+    updateClickStats(now);
         // Система комбо
         game.clickTimes.push(now);
         game.clickTimes = game.clickTimes.filter(time => now - time < 2000);
@@ -854,15 +856,32 @@
         }));
     }
 
-    // Загрузка игры
-        // Загрузка игры
-    function loadGame() {
-        const saved = localStorage.getItem('warClickerSave');
-        if (saved) {
+    // Загрузка игры (исправленная)
+function loadGame() {
+    const saved = localStorage.getItem('warClickerSave');
+    if (saved) {
+        try {
             const data = JSON.parse(saved);
             
-            // Загружаем основные данные
-            Object.assign(game, data);
+            // Восстанавливаем только данные, не функции
+            Object.assign(game, {
+                balance: data.balance || 0,
+                totalDamage: data.totalDamage || 0,
+                baseDamage: data.baseDamage || 1,
+                level: data.level || 1,
+                experience: data.experience || 0,
+                requiredExperience: data.requiredExperience || 500,
+                combo: data.combo || 1,
+                critChance: data.critChance || 0,
+                critMultiplier: data.critMultiplier || 2,
+                autoClicker: data.autoClicker || 0,
+                globalMultiplier: data.globalMultiplier || 1,
+                stats: data.stats || {
+                    totalClicks: 0,
+                    critHits: 0
+                }
+            });
+            
             
             // Восстанавливаем активные бусты
             const now = Date.now();
