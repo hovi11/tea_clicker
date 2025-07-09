@@ -855,6 +855,7 @@
     }
 
     // Загрузка игры
+        // Загрузка игры
     function loadGame() {
         const saved = localStorage.getItem('warClickerSave');
         if (saved) {
@@ -886,8 +887,25 @@
                 }
             }
             
+            // Восстанавливаем обработчик кликов для "Разведки"
+            if (game.activeBoosts.some(b => b.id === 'reconnaissance')) {
+                let clicks = 0;
+                const originalClick = handleClick;
+                handleClick = function() {
+                    clicks++;
+                    if (clicks >= 20) {
+                        game.boosts.reconnaissance.revert();
+                        handleClick = originalClick;
+                    }
+                    return originalClick.apply(this, arguments);
+                };
+            }
+            
             calculateDamage();
         }
+        
+        // Всегда переустанавливаем обработчики событий
+        setupEventListeners();
     }
 
     // Автосохранение каждые 30 секунд
