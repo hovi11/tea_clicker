@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>War Clicker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 10px;
+            user-select: none;
+            background-color: #1e1e1e;
+            color: white;
+        }
+        #click-area {
+            width: 150px;
+            height: 150px;
+            margin: 20px auto;
+            background-image: url('https://q-xx.bstatic.com/xdata/images/hotel/max500/215500382.jpg?k=bfab20a750261abbb7ea08a9886b1eb9e0a7795acd9a3aefca9830a56cccf26b&s=100x100');
+            background-size: cover;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 3px solid #1a73e8;
+            position: relative;
+        }
+        .stats {
+            margin: 10px 0;
+            font-size: 18px;
+        }
+        .nav {
+            display: flex;
+            justify-content: space-around;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: #2d2d2d;
+            padding: 10px;
+        }
+        .nav-button {
+            padding: 10px 15px;
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .menu {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #2d2d2d;
+            padding: 20px;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 400px;
+            z-index: 100;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .upgrade {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #1e1e1e;
+            border-radius: 5px;
+            cursor: pointer;
+            border: 1px solid #444;
+        }
+        .upgrade.unavailable {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .close-button {
+            position: absolute;
+            top: 5px;
+            right: 10px;
+            cursor: pointer;
+            font-size: 20px;
+        }
+        .combo-display {
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #ff7043;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 15px;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .combo-bar-container {
+            position: absolute;
+            bottom: -15px;
+            left: 0;
+            right: 0;
+            height: 5px;
+            background: #444;
+            border-radius: 3px;
+        }
+        .combo-bar {
+            height: 100%;
+            background: linear-gradient(to right, #4CAF50, #FFC107, #F44336);
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .critical-hit {
+            animation: criticalAnimation 0.5s;
+        }
+        @keyframes criticalAnimation {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        .menu-section {
+            margin-bottom: 20px;
+        }
+        .menu-section h3 {
+            margin-top: 0;
+            color: #FFC107;
+        }
+    </style>
+</head>
+<body>
+    <div class="stats">
+        <div>Баланс: <span id="balance">0</span></div>
+        <div>Урон за клик: <span id="damage-per-click">1</span></div>
+        <div>Уровень: <span id="level">1</span> (<span id="current-damage">0</span>/<span id="required-damage">500</span>)</div>
+        <div>Всего нанесено урона: <span id="total-damage">0</span></div>
+    </div>
+
+    <div id="click-area">
+        <div class="combo-display" id="combo-display">x1.0</div>
+        <div class="combo-bar-container">
+            <div class="combo-bar" id="combo-bar"></div>
+        </div>
+    </div>
+
+    <div class="nav">
+        <button class="nav-button" id="shop-button">Магазин</button>
+        <button class="nav-button" id="boosts-button">Усиления</button>
+        <button class="nav-button" id="achievements-button">Достижения</button>
+    </div>
+
+    <div id="shop-menu" class="menu">
+        <span class="close-button" id="close-shop">×</span>
+        <h2>Магазин</h2>
+        <div id="upgrades-container"></div>
+    </div>
+
+    <div id="boost-menu" class="menu">
+        <span class="close-button" id="close-boosts">×</span>
+        <h2>Усиления</h2>
+        <div id="boosts-container"></div>
+    </div>
+
+    <div id="achievements-menu" class="menu">
+        <span class="close-button" id="close-achievements">×</span>
+        <h2>Достижения</h2>
+        <div id="achievements-container"></div>
+    </div>
+<script>
+    // Игровые данные
+    const game = {
+        balance: 0,
+        totalDamage: 0,
+        baseDamage: 1,
+        damagePerClick: 1,
+        level: 1,
+        experience: 0,
+        requiredExperience: 500,
+        combo: 1,
+        maxCombo: 3,
+        activeBoosts: [],
+        maxActiveBoosts: 2,
+        critChance: 0,
+        critMultiplier: 2,
+        autoClicker: 0,
+        globalMultiplier: 1,
+        comboTimeout: null,
+        comboTimeoutDuration: 2000,
+        clickTimes: [],
+        lastClickTime: 0,
+        playTime: 0,
+        upgrades: {
+            // Ближний бой
+            knife: { id: 'knife', name: 'Нож', bought: false, cost: 50, damage: 1, type: 'melee', next: 'axe' },
+            axe: { id: 'axe', name: 'Топор', bought: false, cost: 150, damage: 3, type: 'melee', next: 'sword' },
+            sword: { id: 'sword', name: 'Меч', bought: false, cost: 300, damage: 5, type: 'melee', next: 'chainsaw' },
+            chainsaw: { id: 'chainsaw', name: 'Бензопила', bought: false, cost: 700, damage: 10, type: 'melee', next: 'lightsaber' },
+            lightsaber: { id: 'lightsaber', name: 'Лазерный меч', bought: false, cost: 1500, damage: 20, type: 'melee' },
+            
+            // Дальний бой
+            pistol: { id: 'pistol', name: 'Пистолет', bought: false, cost: 100, damage: 2, type: 'ranged', next: 'rifle' },
+            rifle: { id: 'rifle', name: 'Винтовка', bought: false, cost: 250, damage: 5, type: 'ranged', next: 'sniper' },
+            sniper: { id: 'sniper', name: 'Снайперка', bought: false, cost: 600, damage: 12, type: 'ranged', critChance: 5, critMultiplier: 3, next: 'grenadeLauncher' },
+            grenadeLauncher: { id: 'grenadeLauncher', name: 'Гранатомёт', bought: false, cost: 1200, damage: 25, type: 'ranged', next: 'plasmaGun' },
+            plasmaGun: { id: 'plasmaGun', name: 'Плазменная пушка', bought: false, cost: 2500, damage: 50, type: 'ranged' }
+        },
+        boosts: {
+            emperor: { 
+                id: 'emperor',
+                name: "За императора!", 
+                description: "+2 урона за клик на 1 минуту", 
+                cost: 0, 
+                cooldown: 300000,
+                lastUsed: 0,
+                effect: function() { game.baseDamage += 2; calculateDamage(); },
+                revert: function() { game.baseDamage -= 2; calculateDamage(); },
+                duration: 60000
+            },
+            mobilization: { 
+                id: 'mobilization',
+                name: "Тотальная мобилизация", 
+                description: "Удваивает урон за клик на 30 сек", 
+                cost: 0, 
+                cooldown: 180000,
+                lastUsed: 0,
+                effect: function() { game.damagePerClick *= 2; },
+                revert: function() { game.damagePerClick /= 2; },
+                duration: 30000
+            },
+            reconnaissance: {
+                id: 'reconnaissance',
+                name: "Разведка",
+                description: "+50% урона на 20 кликов",
+                cost: 0,
+                cooldown: 240000,
+                lastUsed: 0,
+                effect: function() { game.globalMultiplier *= 1.5; calculateDamage(); },
+                revert: function() { game.globalMultiplier /= 1.5; calculateDamage(); },
+                clicksLeft: 20
+            }
+        },
+        achievements: {
+            comboMaster: { 
+                name: "Комбо-мастер", 
+                description: "30 кликов за 15 сек", 
+                achieved: false, 
+                reward: "Комбо не сбрасывается 5 сек",
+                condition: function() { return game.stats.fastClicks >= 30; },
+                effect: function() { game.comboTimeoutDuration = 5000; }
+            },
+            berserk: { 
+                name: "Берсерк", 
+                description: "500 кликов/мин", 
+                achieved: false, 
+                reward: "+10 урона на 30 сек",
+                condition: function() { return game.stats.clicksPerMinute >= 500; }
+            },
+            veteran: { 
+                name: "Ветеран", 
+                description: "Достичь 15 уровня", 
+                achieved: false, 
+                reward: "+1 слот для бустов",
+                condition: function() { return game.level >= 15; },
+                effect: function() { game.maxActiveBoosts += 1; }
+            },
+            legend: { 
+                name: "Легенда", 
+                description: "Достичь 25 уровня", 
+                achieved: false, 
+                reward: "Перманентный x1.2 множитель",
+                condition: function() { return game.level >= 25; },
+                effect: function() { game.globalMultiplier *= 1.2; calculateDamage(); }
+            },
+            immortal: { 
+                name: "Бессмертный", 
+                description: "24h в игре", 
+                achieved: false, 
+                reward: "Авто урон +1/сек",
+                condition: function() { return game.playTime >= 86400000; },
+                effect: function() { game.autoClicker += 1; startAutoClicker(); }
+            },
+            investor: { 
+                name: "Инвестор", 
+                description: "Купить 10 улучшений", 
+                achieved: false, 
+                reward: "-5% стоимость всех улучшений",
+                condition: function() { return game.stats.upgradesBought >= 10; },
+                effect: function() { 
+                    for (const upgrade of Object.values(game.upgrades)) {
+                        upgrade.cost = Math.floor(upgrade.cost * 0.95);
+                    }
+                }
+            },
+            oligarch: { 
+                name: "Олигарх", 
+                description: "Накопить 50 000 на балансе", 
+                achieved: false, 
+                reward: "+5% к урону от пассивных источников урона",
+                condition: function() { return game.stats.maxBalance >= 50000; }
+            },
+            beginner: { 
+                name: "Новичок", 
+                description: "100 кликов", 
+                achieved: false, 
+                reward: "+1 базовый урон",
+                condition: function() { return game.stats.totalClicks >= 100; },
+                effect: function() { game.baseDamage += 1; calculateDamage(); }
+            },
+            machineGun: { 
+                name: "Пулемёт", 
+                description: "5000 кликов", 
+                achieved: false, 
+                reward: "+5 урона",
+                condition: function() { return game.stats.totalClicks >= 5000; },
+                effect: function() { game.baseDamage += 5; calculateDamage(); }
+            },
+            sniperAch: { 
+                name: "Снайпер", 
+                description: "50 критических ударов", 
+                achieved: false, 
+                reward: "+5% шанс крита",
+                condition: function() { return game.stats.critHits >= 50; },
+                effect: function() { game.critChance += 5; }
+            },
+            fireStorm: { 
+                name: "Шквал огня", 
+                description: "20 раз достичь комбо x2", 
+                achieved: false, 
+                reward: "+0.5 к множителю комбо",
+                condition: function() { return game.stats.comboX2 >= 20; },
+                effect: function() { game.maxCombo += 0.5; }
+            },
+            totalWar: { 
+                name: "Тотальная война", 
+                description: "1 000 000 общего урона", 
+                achieved: false, 
+                reward: "+10% ко всему урону",
+                condition: function() { return game.totalDamage >= 1000000; },
+                effect: function() { game.globalMultiplier *= 1.1; calculateDamage(); }
+            }
+        },
+        stats: {
+            totalClicks: 0,
+            fastClicks: 0,
+            clicksPerMinute: 0,
+            playTime: 0,
+            upgradesBought: 0,
+            maxBalance: 0,
+            critHits: 0,
+            comboX2: 0,
+            lastClickTime: 0
+        },
+        levelRewards: {
+            5: { effect: function() { game.globalMultiplier *= 1.05; calculateDamage(); }, description: "+5% к урону" },
+            10: { effect: function() { game.baseDamage += 10; calculateDamage(); }, description: "+10 к базовому урону" },
+            15: { effect: function() { game.critMultiplier += 0.5; }, description: "+10% к критическому урону" },
+            20: { effect: function() { game.maxCombo *= 2; }, description: "Удвоение эффекта комбо" },
+            25: { effect: function() { game.autoClicker += 1; startAutoClicker(); }, description: "Автокликер (1 клик/сек)" }
+        },
+        priceMultipliers: {
+            5: 2,
+            10: 3,
+            15: 4
+        }
+    };
+
+    // Инициализация игры
+    function initGame() {
+        loadGame();
+        setupEventListeners();
+        calculateDamage();
+        startDPS();
+        startAutoClicker();
+        updateUI();
+        startPlayTimeCounter();
+    }
+
+    // Настройка обработчиков событий
+    function setupEventListeners() {
+        document.getElementById('click-area').addEventListener('click', handleClick);
+        document.getElementById('shop-button').addEventListener('click', () => {
+            openMenu('shop');
+            renderShop();
+        });
+        document.getElementById('boosts-button').addEventListener('click', () => {
+            openMenu('boosts');
+            renderBoosts();
+        });
+        document.getElementById('achievements-button').addEventListener('click', () => {
+            openMenu('achievements');
+            renderAchievements();
+        });
+        document.getElementById('close-shop').addEventListener('click', () => closeMenu('shop'));
+        document.getElementById('close-boosts').addEventListener('click', () => closeMenu('boosts'));
+        document.getElementById('close-achievements').addEventListener('click', () => closeMenu('achievements'));
+    }
+
+    // Обработка клика
+    function handleClick() {
+        const now = Date.now();
+        game.stats.totalClicks++;
+        game.stats.lastClickTime = now;
+        
+        // Система комбо
+        game.clickTimes.push(now);
+        game.clickTimes = game.clickTimes.filter(time => now - time < 2000);
+        
+        // Проверяем активные клики за последние 2 секунды
+        const activeClicks = game.clickTimes.length;
+        
+        // Обновляем комбо-бар
+        const comboPercent = Math.min(100, (activeClicks / 15) * 100);
+        document.getElementById('combo-bar').style.width = comboPercent + '%';
+        
+        // Повышаем комбо при достижении порогов
+        if (activeClicks >= 15 && activeClicks < 25 && game.combo < 1.5) {
+            game.combo = 1.5;
+            showCombo();
+        } 
+        else if (activeClicks >= 25 && activeClicks < 35 && game.combo < 2) {
+            game.combo = 2;
+            game.stats.comboX2++;
+            showCombo();
+        } 
+        else if (activeClicks >= 35 && game.combo < 3) {
+            game.combo = 3;
+            showCombo();
+        }
+        
+        // Сбрасываем таймер комбо
+        if (game.comboTimeout) clearTimeout(game.comboTimeout);
+        game.comboTimeout = setTimeout(() => {
+            game.combo = 1;
+            document.getElementById('combo-display').style.opacity = '0';
+            document.getElementById('combo-bar').style.width = '0%';
+        }, game.comboTimeoutDuration);
+        
+        // Расчет урона
+        let damage = game.damagePerClick * game.combo;
+        let isCritical = false;
+        
+        // Проверка на критический удар
+        if (Math.random() * 100 < game.critChance) {
+            damage *= game.critMultiplier;
+            isCritical = true;
+            game.stats.critHits++;
+            document.getElementById('click-area').classList.add('critical-hit');
+            setTimeout(() => {
+                document.getElementById('click-area').classList.remove('critical-hit');
+            }, 500);
+        }
+        
+        // Применяем активные бусты
+        game.activeBoosts.forEach(boost => {
+            if (game.boosts[boost.id].onClick) {
+                damage = game.boosts[boost.id].onClick(damage);
+            }
+        });
+        
+        damage = Math.floor(damage);
+        game.balance += damage;
+        game.totalDamage += damage;
+        game.experience += damage;
+        
+        // Проверка уровня
+        checkLevelUp();
+        
+        // Обновление статистики
+        game.stats.maxBalance = Math.max(game.stats.maxBalance, game.balance);
+        
+        // Проверка достижений
+        checkAchievements();
+        
+        updateUI();
+        saveGame();
+    }
+
+    // Показать комбо
+    function showCombo() {
+        const comboDisplay = document.getElementById('combo-display');
+        comboDisplay.textContent = `x${game.combo.toFixed(1)}`;
+        comboDisplay.style.opacity = '1';
+    }
+
+    // Проверка повышения уровня
+    function checkLevelUp() {
+        while (game.experience >= game.requiredExperience) {
+            game.experience -= game.requiredExperience;
+            game.level++;
+            
+            // Обновляем требуемый опыт
+            game.requiredExperience = getRequiredExperience(game.level);
+            
+            // Применяем множитель цен
+            updatePriceMultipliers();
+            
+            // Проверяем награды за уровень
+            if (game.levelRewards[game.level]) {
+                game.levelRewards[game.level].effect();
+                showNotification(`Уровень ${game.level}! ${game.levelRewards[game.level].description}`);
+            }
+            
+            // Проверяем достижения
+            checkAchievements();
+        }
+    }
+
+    // Расчет необходимого опыта для уровня
+    function getRequiredExperience(level) {
+        const requirements = {
+            1: 0,
+            2: 500,
+            3: 1500,
+            4: 3000,
+            5: 5000,
+            6: 8000,
+            7: 12000,
+            8: 18000,
+            9: 25000,
+            10: 35000,
+            11: 50000,
+            12: 75000,
+            13: 100000,
+            14: 150000,
+            15: 200000,
+            16: 300000,
+            17: 450000,
+            18: 600000,
+            19: 800000,
+            20: 1000000,
+            21: 1300000,
+            22: 1700000,
+            23: 2200000,
+            24: 2700000,
+            25: 3500000
+        };
+        return requirements[level] || (requirements[25] * Math.pow(2, level - 25));
+    }
+
+    // Обновление множителей цен
+    function updatePriceMultipliers() {
+        let multiplier = 1.2;
+        
+        if (game.level >= 5) multiplier = game.priceMultipliers[5];
+        if (game.level >= 10) multiplier = game.priceMultipliers[10];
+        if (game.level >= 15) multiplier = game.priceMultipliers[15];
+        
+        for (const upgrade of Object.values(game.upgrades)) {
+            if (!upgrade.bought) {
+                upgrade.cost = Math.floor(upgrade.cost * multiplier);
+            }
+        }
+    }
+
+    // Проверка достижений
+    function checkAchievements() {
+        for (const [id, achievement] of Object.entries(game.achievements)) {
+            if (!achievement.achieved && achievement.condition()) {
+                achievement.achieved = true;
+                if (achievement.effect) achievement.effect();
+                showNotification(`Достижение: ${achievement.name}! ${achievement.reward}`);
+                saveGame();
+            }
+        }
+    }
+
+    // Показать уведомление
+    function showNotification(message) {
+        alert(message);
+    }
+
+    // Расчет урона
+    function calculateDamage() {
+        game.damagePerClick = game.baseDamage;
+        game.critChance = 0;
+        
+        // Применяем улучшения
+        for (const upgrade of Object.values(game.upgrades)) {
+            if (upgrade.bought) {
+                game.damagePerClick += upgrade.damage || 0;
+                game.critChance += upgrade.critChance || 0;
+                if (upgrade.critMultiplier) {
+                    game.critMultiplier = Math.max(game.critMultiplier, upgrade.critMultiplier);
+                }
+            }
+        }
+        
+        // Применяем глобальный множитель
+        game.damagePerClick = Math.floor(game.damagePerClick * game.globalMultiplier);
+        
+        updateUI();
+    }
+
+    // Обновление интерфейса
+    function updateUI() {
+        document.getElementById('balance').textContent = game.balance.toLocaleString();
+        document.getElementById('damage-per-click').textContent = game.damagePerClick.toLocaleString();
+        document.getElementById('total-damage').textContent = game.totalDamage.toLocaleString();
+        document.getElementById('level').textContent = game.level;
+        document.getElementById('current-damage').textContent = game.experience.toLocaleString();
+        document.getElementById('required-damage').textContent = game.requiredExperience.toLocaleString();
+    }
+    // DPS система
+    function startDPS() {
+        setInterval(() => {
+            if (game.dps > 0) {
+                const damage = Math.floor(game.dps * game.globalMultiplier);
+                game.balance += damage;
+                game.totalDamage += damage;
+                game.experience += damage;
+                checkLevelUp();
+                updateUI();
+                saveGame();
+            }
+        }, 1000);
+    }
+
+    // Автокликер
+    function startAutoClicker() {
+        if (game.autoClickInterval) clearInterval(game.autoClickInterval);
+        if (game.autoClicker > 0) {
+            game.autoClickInterval = setInterval(() => {
+                handleClick();
+            }, 1000 / game.autoClicker);
+        }
+    }
+
+    // Отсчет времени игры
+    function startPlayTimeCounter() {
+        setInterval(() => {
+            game.playTime += 1000;
+            game.stats.playTime = game.playTime;
+            checkAchievements();
+        }, 1000);
+    }
+
+    // Магазин
+    function renderShop() {
+        const container = document.getElementById('upgrades-container');
+        container.innerHTML = '';
+        
+        // Ближний бой
+        let meleeSection = document.createElement('div');
+        meleeSection.className = 'menu-section';
+        meleeSection.innerHTML = '<h3>Ближний бой</h3>';
+        container.appendChild(meleeSection);
+        
+        let meleeUpgrades = Object.values(game.upgrades).filter(u => u.type === 'melee');
+        let nextMelee = meleeUpgrades.find(u => !u.bought && (!u.next || game.upgrades[u.next]?.bought === false));
+        
+        if (nextMelee) {
+            const canBuy = game.balance >= nextMelee.cost;
+            const div = document.createElement('div');
+            div.className = `upgrade ${canBuy ? '' : 'unavailable'}`;
+            div.innerHTML = `
+                <strong>${nextMelee.name}</strong><br>
+                +${nextMelee.damage} урон<br>
+                Цена: ${nextMelee.cost}
+            `;
+            
+            if (canBuy) {
+                div.addEventListener('click', () => buyUpgrade(nextMelee.id));
+            }
+            
+            meleeSection.appendChild(div);
+        } else {
+            meleeSection.innerHTML += '<p>Все улучшения куплены!</p>';
+        }
+        
+        // Дальний бой
+        let rangedSection = document.createElement('div');
+        rangedSection.className = 'menu-section';
+        rangedSection.innerHTML = '<h3>Дальний бой</h3>';
+        container.appendChild(rangedSection);
+        
+        let rangedUpgrades = Object.values(game.upgrades).filter(u => u.type === 'ranged');
+        let nextRanged = rangedUpgrades.find(u => !u.bought && (!u.next || game.upgrades[u.next]?.bought === false));
+        
+        if (nextRanged) {
+            const canBuy = game.balance >= nextRanged.cost;
+            const div = document.createElement('div');
+            div.className = `upgrade ${canBuy ? '' : 'unavailable'}`;
+            
+            let special = '';
+            if (nextRanged.critChance) special = `<br>+${nextRanged.critChance}% шанс крита (x${nextRanged.critMultiplier})`;
+            
+            div.innerHTML = `
+                <strong>${nextRanged.name}</strong><br>
+                +${nextRanged.damage} урон${special}<br>
+                Цена: ${nextRanged.cost}
+            `;
+            
+            if (canBuy) {
+                div.addEventListener('click', () => buyUpgrade(nextRanged.id));
+            }
+            
+            rangedSection.appendChild(div);
+        } else {
+            rangedSection.innerHTML += '<p>Все улучшения куплены!</p>';
+        }
+    }
+
+    // Покупка улучшения
+    function buyUpgrade(id) {
+        const upgrade = game.upgrades[id];
+        if (!upgrade.bought && game.balance >= upgrade.cost) {
+            game.balance -= upgrade.cost;
+            upgrade.bought = true;
+            game.stats.upgradesBought++;
+            
+            calculateDamage();
+            checkAchievements();
+            renderShop();
+            updateUI();
+            saveGame();
+        }
+    }
+
+    // Усиления
+    function renderBoosts() {
+        const container = document.getElementById('boosts-container');
+        container.innerHTML = '';
+        
+        for (const boost of Object.values(game.boosts)) {
+            const now = Date.now();
+            const remainingCooldown = Math.max(0, (boost.lastUsed + boost.cooldown) - now);
+            const isActive = game.activeBoosts.some(b => b.id === boost.id && b.endTime > now);
+            const canActivate = !isActive && remainingCooldown <= 0 && 
+                              game.activeBoosts.length < game.maxActiveBoosts;
+            
+            const div = document.createElement('div');
+            div.className = `upgrade ${canActivate ? '' : 'unavailable'}`;
+            div.style.opacity = canActivate ? '1' : '0.7';
+            
+            let statusText;
+            if (isActive) {
+                statusText = 'АКТИВНО';
+            } else if (remainingCooldown > 0) {
+                const minutes = Math.ceil(remainingCooldown / 60000);
+                statusText = `Доступно через: ${minutes} мин`;
+            } else {
+                statusText = 'Готово';
+            }
+            
+            div.innerHTML = `
+                <strong>${boost.name}</strong><br>
+                ${boost.description}<br>
+                ${statusText}
+            `;
+            
+            if (canActivate) {
+                div.addEventListener('click', () => activateBoost(boost.id));
+            }
+            
+            container.appendChild(div);
+        }
+    }
+
+    // Активация усиления
+    function activateBoost(id) {
+        const boost = game.boosts[id];
+        const now = Date.now();
+        
+        boost.lastUsed = now;
+        boost.effect();
+        
+        if (id === 'reconnaissance') {
+            let clicks = 0;
+            const originalClick = handleClick;
+            handleClick = function() {
+                clicks++;
+                if (clicks >= 20) {
+                    boost.revert();
+                    handleClick = originalClick;
+                }
+                return originalClick.apply(this, arguments);
+            };
+        }
+        
+        game.activeBoosts.push({
+            id: boost.id,
+            endTime: now + boost.duration
+        });
+        
+        setTimeout(() => {
+            boost.revert();
+            game.activeBoosts = game.activeBoosts.filter(b => b.id !== boost.id);
+            renderBoosts();
+            saveGame();
+        }, boost.duration);
+        
+        renderBoosts();
+        saveGame();
+    }
+
+    // Достижения
+    function renderAchievements() {
+        const container = document.getElementById('achievements-container');
+        container.innerHTML = '';
+        
+        for (const achievement of Object.values(game.achievements)) {
+            const div = document.createElement('div');
+            div.className = 'upgrade';
+            div.style.border = achievement.achieved ? '2px solid gold' : '1px solid #444';
+            div.style.opacity = achievement.achieved ? '1' : '0.7';
+            
+            let status = achievement.achieved ? 
+                `<span style="color: green;">Получено: ${achievement.reward}</span>` : 
+                '<span style="color: red;">Не получено</span>';
+            
+            div.innerHTML = `
+                <strong>${achievement.name}</strong><br>
+                ${achievement.description}<br>
+                ${status}
+            `;
+            
+            container.appendChild(div);
+        }
+    }
+
+    // Меню
+    function openMenu(type) {
+        document.getElementById(`${type}-menu`).style.display = 'block';
+    }
+
+    function closeMenu(type) {
+        document.getElementById(`${type}-menu`).style.display = 'none';
+    }
+
+    // Сохранение игры
+    function saveGame() {
+        localStorage.setItem('warClickerSave', JSON.stringify({
+            balance: game.balance,
+            totalDamage: game.totalDamage,
+            baseDamage: game.baseDamage,
+            level: game.level,
+            experience: game.experience,
+            requiredExperience: game.requiredExperience,
+            combo: game.combo,
+            critChance: game.critChance,
+            critMultiplier: game.critMultiplier,
+            autoClicker: game.autoClicker,
+            globalMultiplier: game.globalMultiplier,
+            stats: game.stats,
+            upgrades: game.upgrades,
+            activeBoosts: game.activeBoosts,
+            boosts: {
+                emperor: { lastUsed: game.boosts.emperor.lastUsed },
+                mobilization: { lastUsed: game.boosts.mobilization.lastUsed },
+                reconnaissance: { lastUsed: game.boosts.reconnaissance.lastUsed }
+            },
+            achievements: game.achievements,
+            playTime: game.playTime
+        }));
+    }
+
+    // Загрузка игры
+    function loadGame() {
+        const saved = localStorage.getItem('warClickerSave');
+        if (saved) {
+            const data = JSON.parse(saved);
+            
+            // Загружаем основные данные
+            Object.assign(game, data);
+            
+            // Восстанавливаем активные бусты
+            const now = Date.now();
+            game.activeBoosts = data.activeBoosts.filter(boost => {
+                if (boost.endTime > now) {
+                    setTimeout(() => {
+                        if (game.boosts[boost.id]) {
+                            game.boosts[boost.id].revert();
+                        }
+                        game.activeBoosts = game.activeBoosts.filter(b => b.id !== boost.id);
+                        renderBoosts();
+                    }, boost.endTime - now);
+                    return true;
+                }
+                return false;
+            });
+            
+            // Восстанавливаем улучшения
+            for (const [id, upgrade] of Object.entries(data.upgrades)) {
+                if (game.upgrades[id]) {
+                    game.upgrades[id].bought = upgrade.bought;
+                }
+            }
+            
+            calculateDamage();
+        }
+    }
+
+    // Автосохранение каждые 30 секунд
+    setInterval(saveGame, 30000);
+
+    // Запуск игры
+    window.addEventListener('load', initGame);
+</script>
+</body>
+</html>
